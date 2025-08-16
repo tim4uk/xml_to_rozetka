@@ -22,32 +22,41 @@ const COL_PARAM = 10;
 
 // Authenticate with service account
 async function authenticate() {
+  console.log('Starting authentication...');
   const credentials = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
     ? JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY)
     : null;
 
   if (!credentials || typeof credentials !== 'object') {
+    console.error('Invalid or missing GOOGLE_SERVICE_ACCOUNT_KEY in environment');
     throw new Error('Invalid or missing GOOGLE_SERVICE_ACCOUNT_KEY in environment');
   }
+  console.log('Credentials parsed successfully');
 
   const auth = new google.auth.GoogleAuth({
     credentials: credentials,
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
-  return google.sheets({ version: 'v4', auth: await auth.getClient() });
+  const sheets = google.sheets({ version: 'v4', auth: await auth.getClient() });
+  console.log('Authentication completed');
+  return sheets;
 }
 
 // Fetch data from a sheet
 async function getSheetData(sheets, sheetName) {
+  console.log(`Fetching data from sheet: ${sheetName}`);
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
     range: `${sheetName}!A:L`, // Adjust range if needed
   });
-  return response.data.values || [];
+  const data = response.data.values || [];
+  console.log(`Fetched ${data.length} rows from ${sheetName}`);
+  return data;
 }
 
 // Main function
 async function generateXML() {
+  console.log('Starting XML generation process...');
   const sheets = await authenticate();
   let allItems = [];
 
@@ -61,16 +70,22 @@ async function generateXML() {
       filteredItems = items.filter(row => 
         row[COL_STOCK_QTY] === true || row[COL_STOCK_QTY] === 'TRUE' || row[COL_STOCK_QTY] === 'true'
       );
+      console.log(`Filtered ${filteredItems.length} items from ${name}`);
+    } else {
+      console.log(`No filtering, using ${items.length} items from ${name}`);
     }
     allItems = allItems.concat(filteredItems);
   }
+  console.log(`Total items collected: ${allItems.length}`);
 
   // Fetch categories from "Зв'язування категорій"
   const categoriesData = await getSheetData(sheets, 'Зв\'язування категорій');
   const bindingCategories = categoriesData.slice(1);
+  console.log(`Fetched ${bindingCategories.length} category bindings`);
 
   // Build XML
   const date = new Date().toISOString();
+  console.log(`Generating XML with date: ${date}`);
   const doc = create({ version: '1.0', encoding: 'UTF-8' })
     .ele('yml_catalog', { date });
 
@@ -89,6 +104,7 @@ async function generateXML() {
       categories.ele('category', { id, rz_id: id }).txt(name);
     }
   }
+  console.log(`Added ${categories.children.length} categories`);
 
   // Offers
   const offers = shop.ele('offers');
@@ -99,7 +115,6 @@ async function generateXML() {
     const name = row[COL_NAME] || '';
     const name_ua = row[COL_NAME_UA] || '';
     const price = row[COL_PRICE] || '';
-    const currency = 'UAH';
     const category_id = row[COL_CATEGORY_ID] || '';
     const image = row[COL_PICTURES] || '';
     const vendor = row[COL_VENDOR] || '';
@@ -112,7 +127,7 @@ async function generateXML() {
     offer.ele('name').txt(name);
     offer.ele('name_ua').txt(name_ua);
     offer.ele('price').txt(price);
-    offer.ele('currencyId').txt(currency);
+    offer.ele('currencyId').txt('UAH');
     offer.ele('categoryId').txt(category_id);
 
     if (image) {
@@ -126,7 +141,6 @@ async function generateXML() {
 
     offer.ele('stock_quantity').txt(stock_quantity.toString());
 
-    // Use CDATA for descriptions
     offer.ele('description').dat(description.trim());
     offer.ele('description_ua').dat(description_ua.trim());
 
@@ -138,11 +152,15 @@ async function generateXML() {
       }
     }
   }
+  console.log(`Added ${offers.children.length} offers`);
 
   // Output XML to file
   const xmlString = doc.end({ prettyPrint: true });
   fs.writeFileSync('output.xml', xmlString);
   console.log('XML generated: output.xml');
+  console.log(`XML size: ${Buffer.byteLength(xmlString)} bytes`);
 }
 
-generateXML().catch(console.error);
+generateXML().catch(error => {
+  console.error('Error during XML generation:', error.message);
+});
