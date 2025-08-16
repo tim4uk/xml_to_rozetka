@@ -1,105 +1,141 @@
-// generate-xml.js
-import fs from 'fs';
-import { google } from 'googleapis';
-import { create } from 'xmlbuilder2';
+const { google } = require('googleapis');
+const { create } = require('xmlbuilder2');
+const fs = require('fs');
 
-// Авторизація
-const auth = new google.auth.GoogleAuth({
-  credentials: JSON.parse(process.env.GCP_SERVICE_ACCOUNT_KEY),
-  scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
-});
+// Configuration
+const SHEET_ID = process.env.SHEET_ID; // Replace or use env var
+const KEY_FILE = process.env.KEY_JSON; // Path to your service account JSON key
+const SHEET_NAMES = ['Товари Ncase', 'Вручну додані', 'Товари Kiborg', 'Товари Viktailor'];
+const FILTER_ENABLED = false; // true to filter by stock_quantity === true/'TRUE'/'true'
 
-const sheets = google.sheets({ version: "v4", auth });
+// Column indices (0-based, matching your original)
+const COL_ID = 0;
+const COL_STOCK_QTY = 1;
+const COL_NAME = 2;
+const COL_NAME_UA = 3;
+const COL_PRICE = 4;
+const COL_CATEGORY_ID = 5;
+const COL_PICTURES = 6;
+const COL_VENDOR = 7;
+const COL_DESCRIPTION = 8;
+const COL_DESCRIPTION_UA = 9;
+const COL_PARAM = 10;
 
-// ID таблиці
-const SPREADSHEET_ID = "1y0dydLLy-l44qoVKVBaBE_Z7si2b1M55hKvyegiY21Y";
-const SHEET_NAMES = ["Товари Ncase", "Вручну додані", "Товари Kiborg", "Товари Viktailor"];
-const CATEGORY_SHEET = "Зв'язування категорій";
-
-async function fetchSheet(name) {
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SPREADSHEET_ID,
-    range: name,
+// Authenticate with service account
+async function authenticate() {
+  const auth = new google.auth.GoogleAuth({
+    keyFile: KEY_FILE,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
-  return res.data.values || [];
+  return google.sheets({ version: 'v4', auth: await auth.getClient() });
 }
 
-async function main() {
+// Fetch data from a sheet
+async function getSheetData(sheets, sheetName) {
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${sheetName}!A:L`, // Adjust range if needed
+  });
+  return response.data.values || [];
+}
+
+// Main function
+async function generateXML() {
+  const sheets = await authenticate();
   let allItems = [];
+
+  // Fetch items from product sheets
   for (const name of SHEET_NAMES) {
-    const data = await fetchSheet(name);
+    const data = await getSheetData(sheets, name);
     if (data.length <= 1) continue;
-    allItems = allItems.concat(data.slice(1)); // без заголовків
+    const items = data.slice(1);
+    let filteredItems = items;
+    if (FILTER_ENABLED) {
+      filteredItems = items.filter(row => 
+        row[COL_STOCK_QTY] === true || row[COL_STOCK_QTY] === 'TRUE' || row[COL_STOCK_QTY] === 'true'
+      );
+    }
+    allItems = allItems.concat(filteredItems);
   }
 
-  const categoriesData = await fetchSheet(CATEGORY_SHEET);
+  // Fetch categories from "Зв'язування категорій"
+  const categoriesData = await getSheetData(sheets, 'Зв\'язування категорій');
+  const bindingCategories = categoriesData.slice(1);
 
-  // XML root
-  const root = create({ version: "1.0", encoding: "UTF-8" })
-    .ele("yml_catalog", { date: new Date().toISOString() })
-      .ele("shop");
+  // Build XML
+  const date = new Date().toISOString();
+  const doc = create({ version: '1.0', encoding: 'UTF-8' })
+    .ele('yml_catalog', { date });
 
-  // Валюта
-  root.ele("currencies")
-    .ele("currency", { id: "UAH", rate: "1" }).up().up();
+  const shop = doc.ele('shop');
 
-  // Категорії
-  const categories = root.ele("categories");
-  categoriesData.slice(1).forEach(row => {
-    if (row[0] && row[1]) {
-      categories.ele("category", { id: row[0], rz_id: row[0] }).txt(row[1]).up();
+  // Currencies
+  const currencies = shop.ele('currencies');
+  currencies.ele('currency', { id: 'UAH', rate: '1' });
+
+  // Categories
+  const categories = shop.ele('categories');
+  for (const bindingCategory of bindingCategories) {
+    const id = bindingCategory[0];
+    const name = bindingCategory[1];
+    if (id && name) {
+      categories.ele('category', { id, rz_id: id }).txt(name);
     }
-  });
+  }
 
-  // Товари
-  const offers = root.ele("offers");
-  allItems.forEach(row => {
-    const [
-      id, stockQty, name, nameUa, price, categoryId,
-      pictures, vendor, description, descriptionUa, params
-    ] = row;
+  // Offers
+  const offers = shop.ele('offers');
+  for (const row of allItems) {
+    const id = row[COL_ID];
+    const available = row[COL_STOCK_QTY] ? 'true' : 'false';
+    const stock_quantity = available === 'true' ? 30 : 0;
+    const name = row[COL_NAME] || '';
+    const name_ua = row[COL_NAME_UA] || '';
+    const price = row[COL_PRICE] || '';
+    const currency = 'UAH';
+    const category_id = row[COL_CATEGORY_ID] || '';
+    const image = row[COL_PICTURES] || '';
+    const vendor = row[COL_VENDOR] || '';
+    const description = row[COL_DESCRIPTION] || '';
+    const description_ua = row[COL_DESCRIPTION_UA] || '';
+    const params = row[COL_PARAM] || '';
 
-    const available = stockQty ? "true" : "false";
-    const stock_quantity = available === "true" ? 30 : 0;
+    const offer = offers.ele('offer', { id, available });
 
-    const offer = offers.ele("offer", { id, available });
-    offer.ele("name").txt(name || "").up();
-    offer.ele("name_ua").txt(nameUa || "").up();
-    offer.ele("price").txt(price || "").up();
-    offer.ele("currencyId").txt("UAH").up();
-    offer.ele("categoryId").txt(categoryId || "").up();
+    offer.ele('name').txt(name);
+    offer.ele('name_ua').txt(name_ua);
+    offer.ele('price').txt(price);
+    offer.ele('currencyId').txt(currency);
+    offer.ele('categoryId').txt(category_id);
 
-    if (pictures) {
-      (pictures.includes(",") ? pictures.split(",") : [pictures]).forEach(pic => {
-        if (pic) offer.ele("picture").txt(pic.trim()).up();
-      });
+    if (image) {
+      const pics = image.includes(',') ? image.split(',') : [image];
+      for (const pic of pics) {
+        if (pic.trim()) offer.ele('picture').txt(pic.trim());
+      }
     }
 
-    if (vendor) {
-      offer.ele("vendor").txt(vendor).up();
+    if (vendor) offer.ele('vendor').txt(vendor);
+
+    offer.ele('stock_quantity').txt(stock_quantity.toString());
+
+    // Use CDATA for descriptions
+    offer.ele('description').dat(description.trim());
+    offer.ele('description_ua').dat(description_ua.trim());
+
+    const paramValues = params.split('\n');
+    for (const param of paramValues) {
+      const [nameParam, value] = param.split(' - ');
+      if (nameParam && value) {
+        offer.ele('param', { name: nameParam.trim() }).txt(value.trim());
+      }
     }
+  }
 
-    offer.ele("stock_quantity").txt(stock_quantity).up();
-
-    // CDATA
-    offer.ele("description").dat(description || "").up();
-    offer.ele("description_ua").dat(descriptionUa || "").up();
-
-    if (params) {
-      params.split("\n").forEach(param => {
-        const [pName, val] = param.split(" - ");
-        if (pName && val) {
-          offer.ele("param", { name: pName.trim() }).txt(val.trim()).up();
-        }
-      });
-    }
-  });
-
-  const xml = root.end({ prettyPrint: true });
-  fs.writeFileSync("feed.xml", xml, "utf-8");
+  // Output XML to file
+  const xmlString = doc.end({ prettyPrint: true });
+  fs.writeFileSync('output.xml', xmlString);
+  console.log('XML generated: output.xml');
 }
 
-main().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+generateXML().catch(console.error);
