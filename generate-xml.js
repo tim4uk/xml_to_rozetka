@@ -24,7 +24,7 @@ const COL_PARAM = 10;
 // Authenticate with service account
 async function authenticate() {
   const auth = new google.auth.GoogleAuth({
-    keyFile: KEY_FILE,
+    keyFile: JSON.parse(process.env.KEY_JSON || '{}'),
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
   return google.sheets({ version: 'v4', auth: await auth.getClient() });
