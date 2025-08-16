@@ -4,7 +4,6 @@ const fs = require('fs');
 
 // Configuration
 const SHEET_ID = process.env.SHEET_ID; // Replace or use env var
-const KEY_FILE = process.env.KEY_JSON; // Path to your service account JSON key
 const SHEET_NAMES = ['Товари Ncase', 'Вручну додані', 'Товари Kiborg', 'Товари Viktailor'];
 const FILTER_ENABLED = false; // true to filter by stock_quantity === true/'TRUE'/'true'
 
@@ -23,8 +22,16 @@ const COL_PARAM = 10;
 
 // Authenticate with service account
 async function authenticate() {
+  const credentials = process.env.KEY_JSON
+    ? JSON.parse(process.env.KEY_JSON)
+    : null;
+
+  if (!credentials || typeof credentials !== 'object') {
+    throw new Error('Invalid or missing GOOGLE_SERVICE_ACCOUNT_KEY in environment');
+  }
+
   const auth = new google.auth.GoogleAuth({
-    keyFile: JSON.parse(process.env.KEY_JSON || '{}'),
+    credentials: credentials,
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
   return google.sheets({ version: 'v4', auth: await auth.getClient() });
