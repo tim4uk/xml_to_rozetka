@@ -3,11 +3,11 @@ const { create } = require('xmlbuilder2');
 const fs = require('fs');
 
 // Configuration
-const SHEET_ID = process.env.SHEET_ID; // Replace or use env var
+const SHEET_ID = process.env.SHEET_ID;
 const SHEET_NAMES = ['Товари Ncase', 'Вручну додані', 'Товари Kiborg', 'Товари Viktailor'];
-const FILTER_ENABLED = false; // true to filter by stock_quantity === true/'TRUE'/'true'
+const FILTER_ENABLED = false;
 
-// Column indices (0-based, matching your original)
+// Column indices (0-based)
 const COL_ID = 0;
 const COL_STOCK_QTY = 1;
 const COL_NAME = 2;
@@ -20,7 +20,7 @@ const COL_DESCRIPTION = 8;
 const COL_DESCRIPTION_UA = 9;
 const COL_PARAM = 10;
 
-// Authenticate with service account
+// Authenticate
 async function authenticate() {
   console.log('Starting authentication...');
   const credentials = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
@@ -42,12 +42,12 @@ async function authenticate() {
   return sheets;
 }
 
-// Fetch data from a sheet
+// Fetch data
 async function getSheetData(sheets, sheetName) {
   console.log(`Fetching data from sheet: ${sheetName}`);
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${sheetName}!A:L`, // Adjust range if needed
+    range: `${sheetName}!A:L`,
   });
   const data = response.data.values || [];
   console.log(`Fetched ${data.length} rows from ${sheetName}`);
@@ -60,14 +60,14 @@ async function generateXML() {
   const sheets = await authenticate();
   let allItems = [];
 
-  // Fetch items from product sheets
+  // Fetch items
   for (const name of SHEET_NAMES) {
     const data = await getSheetData(sheets, name);
     if (data.length <= 1) continue;
     const items = data.slice(1);
     let filteredItems = items;
     if (FILTER_ENABLED) {
-      filteredItems = items.filter(row => 
+      filteredItems = items.filter(row =>
         row[COL_STOCK_QTY] === true || row[COL_STOCK_QTY] === 'TRUE' || row[COL_STOCK_QTY] === 'true'
       );
       console.log(`Filtered ${filteredItems.length} items from ${name}`);
@@ -78,7 +78,7 @@ async function generateXML() {
   }
   console.log(`Total items collected: ${allItems.length}`);
 
-  // Fetch categories from "Зв'язування категорій"
+  // Fetch categories
   const categoriesData = await getSheetData(sheets, 'Зв\'язування категорій');
   const bindingCategories = categoriesData.slice(1);
   console.log(`Fetched ${bindingCategories.length} category bindings`);
@@ -97,17 +97,20 @@ async function generateXML() {
 
   // Categories
   const categories = shop.ele('categories');
+  let categoryCount = 0;
   for (const bindingCategory of bindingCategories) {
     const id = bindingCategory[0];
     const name = bindingCategory[1];
     if (id && name) {
       categories.ele('category', { id, rz_id: id }).txt(name);
+      categoryCount++;
     }
   }
-  console.log(`Added ${categories.children.length} categories`);
+  console.log(`Added ${categoryCount} categories`);
 
   // Offers
   const offers = shop.ele('offers');
+  let offerCount = 0;
   for (const row of allItems) {
     const id = row[COL_ID];
     const available = row[COL_STOCK_QTY] ? 'true' : 'false';
@@ -151,10 +154,11 @@ async function generateXML() {
         offer.ele('param', { name: nameParam.trim() }).txt(value.trim());
       }
     }
+    offerCount++;
   }
-  console.log(`Added ${offers.children.length} offers`);
+  console.log(`Added ${offerCount} offers`);
 
-  // Output XML to file
+  // Output XML
   const xmlString = doc.end({ prettyPrint: true });
   fs.writeFileSync('output.xml', xmlString);
   console.log('XML generated: output.xml');
