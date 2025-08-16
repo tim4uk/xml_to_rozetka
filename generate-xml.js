@@ -4,7 +4,8 @@ const fs = require('fs');
 
 // Configuration
 const SHEET_ID = process.env.SHEET_ID;
-const SHEET_NAMES = ['Товари Ncase', 'Вручну додані', 'Товари Kiborg', 'Товари Viktailor'];
+// const SHEET_NAMES = ['Товари Ncase', 'Вручну додані', 'Товари Kiborg', 'Товари Viktailor'];
+const SHEET_NAMES = ['Вручну додані'];
 const FILTER_ENABLED = false;
 
 // Column indices (0-based)
