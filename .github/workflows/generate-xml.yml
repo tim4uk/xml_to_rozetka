@@ -1,0 +1,31 @@
+name: Generate XML from Google Sheets
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      - name: Write service account key
+        run: echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}" > service-account-key.json
+      - name: Run script
+        env:
+          SHEET_ID: 'YOUR_SHEET_ID_HERE'  # Add as repo secret or hardcode
+        run: node generate-xml.js
+      - name: Commit XML file
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          git add output.xml
+          git commit -m 'Update XML file' || echo "No changes"
+          git push
