@@ -22,7 +22,11 @@ jobs:
       - name: Run script
         env:
           SHEET_ID: ${{ secrets.SHEET_ID }}
-        run: node generate-xml.js
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}  # Додано
+        run: |
+          node generate-xml.js
+          ls -la  # Для перевірки вмісту директорії
+          if [ ! -f output.xml ]; then echo "Файл output.xml не знайдено!"; exit 1; fi
       - name: Commit XML file
         run: |
           git config --global user.name 'GitHub Actions'
