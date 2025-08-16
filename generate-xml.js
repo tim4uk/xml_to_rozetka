@@ -22,8 +22,8 @@ const COL_PARAM = 10;
 
 // Authenticate with service account
 async function authenticate() {
-  const credentials = process.env.KEY_JSON
-    ? JSON.parse(process.env.KEY_JSON)
+  const credentials = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+    ? JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY)
     : null;
 
   if (!credentials || typeof credentials !== 'object') {
