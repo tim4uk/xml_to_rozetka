@@ -18,7 +18,7 @@ jobs:
           node-version: '20'
       - run: npm install googleapis xmlbuilder2
       - name: Write service account key
-        run: echo "${{ secrets.KEY_JSON }}" > service-account-key.json
+        run: echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}" > service-account-key.json
       - name: Run script
         env:
           SHEET_ID: ${{ secrets.SHEET_ID }}
