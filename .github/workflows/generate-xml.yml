@@ -4,7 +4,8 @@ on:
   push:
     branches: [ main ]
   schedule:
-    - cron: '0 0 * * *'  # Щодня о півночі
+    - cron: '0 * * * *'  # Кожну годину (0 хвилина кожної години)
+  workflow_dispatch:  # Дозволяє ручний запуск
 
 jobs:
   build:
@@ -20,7 +21,7 @@ jobs:
         run: echo "${{ secrets.KEY_JSON }}" > service-account-key.json
       - name: Run script
         env:
-          SHEET_ID: ${{ secrets.SHEET_ID }}  # Додайте SHEET_ID у секрети репозиторію
+          SHEET_ID: ${{ secrets.SHEET_ID }}
         run: node generate-xml.js
       - name: Commit XML file
         run: |
