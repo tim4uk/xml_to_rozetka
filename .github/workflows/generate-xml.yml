@@ -4,8 +4,8 @@ on:
   push:
     branches: [ main ]
   schedule:
-    - cron: '0 * * * *'  # Кожну годину (0 хвилина кожної години)
-  workflow_dispatch:  # Дозволяє ручний запуск
+    - cron: '0 * * * *'  # Кожну годину
+  workflow_dispatch:  # Ручний запуск
 
 jobs:
   build:
@@ -22,10 +22,10 @@ jobs:
       - name: Run script
         env:
           SHEET_ID: ${{ secrets.SHEET_ID }}
-          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}  # Додано
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
         run: |
           node generate-xml.js
-          ls -la  # Для перевірки вмісту директорії
+          ls -la
           if [ ! -f output.xml ]; then echo "Файл output.xml не знайдено!"; exit 1; fi
       - name: Commit XML file
         run: |
@@ -33,4 +33,4 @@ jobs:
           git config --global user.email 'actions@github.com'
           git add output.xml
           git commit -m 'Оновлення XML файлу' || echo "Без змін"
-          git push
+          git push https://${{ secrets.PAT_TOKEN }}@github.com/tim4uk/xml_to_rozetka.git main
