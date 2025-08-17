@@ -30,10 +30,11 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.PAT_TOKEN }}
           publish_dir: ./
           publish_branch: gh-pages
           keep_files: false
-          # залишаємо тільки output.xml
+          force_orphan: true
           exclude_assets: '**'
           include_assets: 'output.xml'
+
