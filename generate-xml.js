@@ -21,6 +21,25 @@ const COL_DESCRIPTION = 8;
 const COL_DESCRIPTION_UA = 9;
 const COL_PARAM = 10;
 
+// --- Sanitizers --------------------------------------------------------------
+function sanitizeForXmlText(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/&reg;?/gi, '®')
+    .replace(/&copy;?/gi, '©')
+    .replace(/&trade;?/gi, '™')
+    .replace(/&nbsp;?/gi, ' ')
+    // екранізуємо ЛИШЕ «сирі» амперсанди, не чіпаючи валідні XML-ентіті
+    .replace(/&(?!amp;|lt;|gt;|quot;|apos;)/gi, '&amp;');
+}
+
+function sanitizeForCdata(text) {
+  // те саме + безпечне розбиття ']]>' усередині CDATA
+  const t = sanitizeForXmlText(text);
+  return t.replace(/]]>/g, ']]]]><![CDATA[>');
+}
+// ---------------------------------------------------------------------------
+
 // Authenticate
 async function authenticate() {
   console.log('Starting authentication...');
@@ -66,21 +85,17 @@ async function generateXML() {
     const data = await getSheetData(sheets, name);
     if (data.length <= 1) continue;
     const items = data.slice(1);
-    let filteredItems = items;
-    if (FILTER_ENABLED) {
-      filteredItems = items.filter(row =>
-        row[COL_STOCK_QTY] === true || row[COL_STOCK_QTY] === 'TRUE' || row[COL_STOCK_QTY] === 'true'
-      );
-      console.log(`Filtered ${filteredItems.length} items from ${name}`);
-    } else {
-      console.log(`No filtering, using ${items.length} items from ${name}`);
-    }
+    const filteredItems = FILTER_ENABLED
+      ? items.filter(row =>
+          row[COL_STOCK_QTY] === true || row[COL_STOCK_QTY] === 'TRUE' || row[COL_STOCK_QTY] === 'true'
+        )
+      : items;
     allItems = allItems.concat(filteredItems);
   }
   console.log(`Total items collected: ${allItems.length}`);
 
   // Fetch categories
-  const categoriesData = await getSheetData(sheets, 'Зв\'язування категорій');
+  const categoriesData = await getSheetData(sheets, "Зв'язування категорій");
   const bindingCategories = categoriesData.slice(1);
   console.log(`Fetched ${bindingCategories.length} category bindings`);
 
@@ -103,7 +118,7 @@ async function generateXML() {
     const id = bindingCategory[0];
     const name = bindingCategory[1];
     if (id && name) {
-      categories.ele('category', { id, rz_id: id }).txt(name);
+      categories.ele('category', { id, rz_id: id }).txt(sanitizeForXmlText(name));
       categoryCount++;
     }
   }
@@ -128,56 +143,57 @@ async function generateXML() {
 
     const offer = offers.ele('offer', { id, available });
 
-    offer.ele('name').txt(name);
-    offer.ele('name_ua').txt(name_ua);
-    offer.ele('price').txt(price);
+    offer.ele('name').txt(sanitizeForXmlText(name));
+    offer.ele('name_ua').txt(sanitizeForXmlText(name_ua));
+    offer.ele('price').txt(sanitizeForXmlText(price));
     offer.ele('currencyId').txt('UAH');
-    offer.ele('categoryId').txt(category_id);
+    offer.ele('categoryId').txt(sanitizeForXmlText(category_id));
 
     if (image) {
       const pics = image.includes(',') ? image.split(',') : [image];
       for (const pic of pics) {
-        if (pic.trim()) offer.ele('picture').txt(pic.trim());
+        const p = pic.trim();
+        if (p) offer.ele('picture').txt(sanitizeForXmlText(p));
       }
     }
 
-    if (vendor) offer.ele('vendor').txt(vendor);
+    if (vendor) offer.ele('vendor').txt(sanitizeForXmlText(vendor));
 
-    offer.ele('stock_quantity').txt(stock_quantity.toString());
+    offer.ele('stock_quantity').txt(String(stock_quantity));
 
-  offer.ele('description').dat(sanitizeText(description.trim()));
-  offer.ele('description_ua').dat(sanitizeText(description_ua.trim()));
-
+    // CDATA з додатковою санітизацією
+    offer.ele('description').dat(sanitizeForCdata(description.trim()));
+    offer.ele('description_ua').dat(sanitizeForCdata(description_ua.trim()));
 
     const paramValues = params.split('\n');
     for (const param of paramValues) {
       const [nameParam, value] = param.split(' - ');
       if (nameParam && value) {
-        offer.ele('param', { name: nameParam.trim() }).txt(value.trim());
+        offer
+          .ele('param', { name: sanitizeForXmlText(nameParam.trim()) })
+          .txt(sanitizeForXmlText(value.trim()));
       }
     }
     offerCount++;
   }
   console.log(`Added ${offerCount} offers`);
 
-  // Output XML
-  const xmlString = doc.end({ prettyPrint: true });
-  fs.writeFileSync('output.xml', xmlString);
+  // Output XML + страхувальна пост-обробка
+  let xmlString = doc.end({ prettyPrint: true });
+
+  // Якщо раптом прослизнули інші HTML-ентіті (типу &laquo;), перетворюємо на &amp;...
+  const suspicious = xmlString.match(/&(?!amp;|lt;|gt;|quot;|apos;)[a-zA-Z]+;?/g);
+  if (suspicious) {
+    console.warn('Found suspicious entities, auto-escaping:', [...new Set(suspicious)].slice(0, 10));
+    xmlString = xmlString.replace(/&(?!amp;|lt;|gt;|quot;|apos;)([a-zA-Z]+);?/g, '&amp;$1;');
+  }
+
+  fs.writeFileSync('output.xml', xmlString, 'utf8');
   console.log('XML generated: output.xml');
   console.log(`XML size: ${Buffer.byteLength(xmlString)} bytes`);
 }
 
-function sanitizeText(text) {
-  if (!text) return '';
-  return text
-    .replace(/&reg;/gi, '®')
-    .replace(/&copy;/gi, '©')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&trade;/gi, '™')
-    .replace(/&/g, '&amp;'); // на всяк випадок, щоб сирі & не ламали XML
-}
-
-
 generateXML().catch(error => {
-  console.error('Error during XML generation:', error.message);
+  console.error('Error during XML generation:', error);
+  process.exit(1);
 });
