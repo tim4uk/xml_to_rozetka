@@ -145,8 +145,9 @@ async function generateXML() {
 
     offer.ele('stock_quantity').txt(stock_quantity.toString());
 
-    offer.ele('description').dat(description.trim());
-    offer.ele('description_ua').dat(description_ua.trim());
+  offer.ele('description').dat(sanitizeText(description.trim()));
+  offer.ele('description_ua').dat(sanitizeText(description_ua.trim()));
+
 
     const paramValues = params.split('\n');
     for (const param of paramValues) {
@@ -165,6 +166,17 @@ async function generateXML() {
   console.log('XML generated: output.xml');
   console.log(`XML size: ${Buffer.byteLength(xmlString)} bytes`);
 }
+
+function sanitizeText(text) {
+  if (!text) return '';
+  return text
+    .replace(/&reg;/gi, '®')
+    .replace(/&copy;/gi, '©')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&trade;/gi, '™')
+    .replace(/&/g, '&amp;'); // на всяк випадок, щоб сирі & не ламали XML
+}
+
 
 generateXML().catch(error => {
   console.error('Error during XML generation:', error.message);
