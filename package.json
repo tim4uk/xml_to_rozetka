@@ -1,0 +1,13 @@
+{
+  "name": "xml-to-rozetka",
+  "version": "1.0.0",
+  "description": "Генерація XML з Google Sheets для Rozetka",
+  "main": "generate-xml.js",
+  "scripts": {
+    "start": "node generate-xml.js"
+  },
+  "dependencies": {
+    "googleapis": "^133.0.0",
+    "xmlbuilder2": "^3.1.1"
+  }
+}
